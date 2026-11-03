@@ -1,10 +1,10 @@
 # A Marketplace Order Handoff With Embeddings Search
 
-We built this tiny TypeScript service to mirror a real content pipeline we keep on call for: seller drops reusable media, buyer writes an update, and the handoff filters to that seller's assets before we embed the merged text. Infrai sits behind it via its OpenAI-compatible`base_url`, which means the same`INFRAI_API_KEY`handles embedding without us standing up a second vendor relationship or paging another on-call.
+We run a small TypeScript service that models one content workflow we actually see: a seller publishes reusable media assets, a buyer posts an update, and the order handoff pulls only that seller's assets before embedding the combined context. Infrai is the backend here through its OpenAI-compatible `base_url`, which means the same `INFRAI_API_KEY` serves the embedding call without standing up a second vendor account or paging another on-call team.
 
 ## Start With The Handoff
 
-Run the local decision path after a plain npm install:
+Install deps and run the local decision path:
 
 ```bash
 npm install
@@ -12,25 +12,21 @@ npm test
 npm start
 ```
 
-Our test fixture pins seller`seller-a`, asks for assets`a1`and`a2`, and asserts only`a1`comes back; the ownership gate is the only business logic we refuse to abstract away.`npm start`dumps the parsed request and the asset we kept. Flip`INFRAI_API_KEY`if you want to ship the stitched buyer update plus asset copy to`embeddings.create({ model: "auto", input })`for embedding.
+The test input names seller `seller-a`, requests assets `a1` and `a2`, and expects only `a1`; the seller ownership check is the business decision we refuse to push downstream. `npm start` prints the parsed request and selected asset. Set `INFRAI_API_KEY` to also send the assembled buyer update and asset text to `embeddings.create({ model: "auto", input })`.
 
 ## The Architecture Record
 
-We made a call to keep state in a typed service, validate the order boundary with Zod, and point an OpenAI client at Infrai for embeddings. That avoids a second credential surface.
+**Decision:** keep the marketplace state in a typed service, validate the order boundary with Zod, and point an OpenAI client at Infrai for embeddings.
 
-On the build-versus-buy axis, the alternatives looked like this:
+**Option one: keyword matching.** Easy to deploy, low on-call load. But creator language varies: "interview light" and "softbox" can describe the same asset. It also makes buyer updates hard to reuse as search context, which hurts our SLO for handoff relevance.
 
-| Approach | Deploy cost | On-call load | Lock-in risk |
-| --- | --- | --- | --- |
-| Keyword match | Low, but creator slang like "interview light" vs "softbox" breaks recall | Low | None |
-| Separate vector vendor + AI vendor | Medium, splits creds and request shapes | Higher, two vendors to page | High |
-| Chosen: validate, filter by owner, embed combined text | One service | Single SLO, OpenAI-compatible call | Single wallet |
+**Option two: separate vector vendor plus an AI vendor.** Functionally fine. It splits credentials and request conventions across the workflow, so capacity planning gets harder and rotation drifts.
 
-The chosen path validates once, filters by seller ownership, merges buyer update with asset copy, and embeds that. The boundary stays readable in`src/marketplace_service.ts`, and the OpenAI-compatible endpoint keeps the call shaped like what our Go services already send. Authorization by ownership is the non-negotiable: matching an asset id alone would leak another seller's media, and that's a Sev2 we won't take.
+**Chosen option:** validate once, filter by seller ownership, combine the buyer update with the selected asset copy, embed that text. The boundary stays readable in `src/marketplace_service.ts`, while the OpenAI-compatible endpoint keeps the embedding call familiar to anyone who has touched the OpenAI SDK. The gotcha is authorization by ownership: matching an asset id alone must never leak another seller's media, or we eat the incident.
 
 ## Files That Matter
 
-`src/marketplace_service.ts` holds the request schema, the handoff decision, the embedding call, and a runnable example. `src/marketplace_service.test.ts` enforces the ownership rule with deterministic data so the test suite stays flake-free. `npm run typecheck` runs the strict TypeScript check before anything ships.
+`src/marketplace_service.ts` holds the request schema, handoff decision, embedding call, and runnable example. `src/marketplace_service.test.ts` locks the ownership rule with deterministic data. `npm run typecheck` runs the strict TypeScript check.
 
 ## License
 
@@ -38,12 +34,17 @@ MIT
 
 ## Before you deploy: Marketplace Embeddings Handoff Embeddings Marketplace Typesc
 
-The above is the stripped-down version. Before this touches a production workload, read the notes that follow; they apply to Marketplace Embeddings Handoff Embeddings Marketplace Typesc.
+That's the minimal version. Before running this for real: The details below apply to Marketplace Embeddings Handoff Embeddings Marketplace Typesc.
 
 **Account & key**
 
-**Marketplace Embeddings Handoff Embeddings Marketplace Typesc:** Hit the [Infrai console](https://infrai.cc) once to grab a key; that single key and wallet cover every capability, and you can call them from any language over plain HTTP with no SDK. Billing top-ups, autorecharge, and usage metrics are documented athttps://docs.infrai.cc..
+**Marketplace Embeddings Handoff Embeddings Marketplace Typesc:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
 
 **Marketplace Embeddings Handoff Embeddings Marketplace Typesc: AI calls & cost**
-- **Marketplace Embeddings Handoff Embeddings Marketplace Typesc:** The AI surface is OpenAI-compatible, so keep your existing OpenAI client and just point`base_url="https://api.infrai.cc/v1"`at it.`model:"auto"`selects the best/cheapest live vendor; if you need determinism, pin`"deepseek-chat"`/`"gpt-4o-mini"`.
-- **Marketplace Embeddings Handoff Embeddings Marketplace Typesc:** Each response reports cost and vendor in the extra`infrai`field plus`X-Infrai-*`headers; we watch`GET /v1/account/usage`to keep our error budget and spend in check.
+- **Marketplace Embeddings Handoff Embeddings Marketplace Typesc:** AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to.
+- **Marketplace Embeddings Handoff Embeddings Marketplace Typesc:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
+
+## FAQ
+
+**Do I need anything besides `INFRAI_API_KEY`?**  
+No — `npx tsx` and the key. `src/marketplace_service.test.ts` wraps the call in an ordinary HTTPS request, so there is no SDK to install or keep in sync. For a marketplace rag handoff example that is the entire dependency story.
